@@ -1,0 +1,93 @@
+import asyncio
+import aiohttp
+import os
+from flask import Flask
+from threading import Thread
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+
+# --- CONFIGURATION ---
+# Inhe aap direct yahan paste kar sakte hain ya Render ke Environment Variables mein daal sakte hain
+TELEGRAM_TOKEN = '8546702939:AAH8rL-yI4exnfRNJY_QjFRUw4hATdTrDYI'
+XBOX_API_KEY = '6bbae1af-a9b3-4783-969a-20ee73c50055'
+CONCURRENT_LIMIT = 2 
+
+# --- KEEP-ALIVE SERVER (For Render) ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# --- XBOX CHECKER LOGIC ---
+HEADERS = {'X-Authorization': 6bbae1af-a9b3-4783-969a-20ee73c50055}
+
+async def check_gamertag(session, semaphore, gamertag):
+    url = f"https://xbl.io/api/v2/search/{gamertag.strip()}"
+    async with semaphore:
+        try:
+            async with session.get(url, headers=HEADERS, timeout=10) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get('people'):
+                        user = data['people'][0]
+                        return f"✅ {user['gamertag']} | GS: {user.get('gamerScore', 0)}"
+                return None
+        except:
+            return None
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Bhai ready hoon! Bas .txt file bhejo jisme Gamertags hon.")
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = await update.message.document.get_file()
+    file_content = await file.download_as_bytearray()
+    
+    try:
+        gamertags = file_content.decode("utf-8").splitlines()
+    except:
+        await update.message.reply_text("❌ File format sahi nahi hai. UTF-8 .txt use karein.")
+        return
+
+    await update.message.reply_text(f"⏳ {len(gamertags)} accounts check kar raha hoon...")
+
+    semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
+    async with aiohttp.ClientSession() as session:
+        tasks = [check_gamertag(session, semaphore, gt) for gt in gamertags if gt.strip()]
+        results = await asyncio.gather(*tasks)
+        valid_list = [r for r in results if r]
+
+    if valid_list:
+        report = "\n".join(valid_list)
+        if len(report) > 4000:
+            with open("results.txt", "w") as f:
+                f.write(report)
+            await update.message.reply_document(document=open("results.txt", "rb"), caption="Mil gaye valid accounts!")
+        else:
+            await update.message.reply_text(f"🎯 Valid Accounts:\n\n{report}", parse_mode="Markdown")
+    else:
+        await update.message.reply_text("❌ Ek bhi valid account nahi mila.")
+
+# --- MAIN RUNNER ---
+def main():
+    # Start the web server first
+    keep_alive()
+    
+    # Start Telegram Bot
+    application = Application.builder().token(8546702939:AAH8rL-yI4exnfRNJY_QjFRUw4hATdTrDYI).build()
+    
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_document))
+    
+    print("Bot chal raha hai...")
+    application.run_polling()
+
+if name == "main":
+    main()
