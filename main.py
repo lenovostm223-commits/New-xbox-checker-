@@ -90,5 +90,5 @@ def main():
     print("Bot chal raha hai...")
     application.run_polling()
 
-if name == "main":
+if __name__ == "__main__":
     main()
