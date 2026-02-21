@@ -81,7 +81,8 @@ def main():
     keep_alive()
     
     # Start Telegram Bot
-    application = Application.builder().token(8546702939:AAH8rL-yI4exnfRNJY_QjFRUw4hATdTrDYI).build()
+    application = Application.builder().token('8546702939:AAH8rL-yI4exnfRNJY_QjFRUw4hATdTrDYI').build()
+
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_document))
